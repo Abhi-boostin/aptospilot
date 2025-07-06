@@ -120,10 +120,11 @@ export default function Dashboard() {
       console.log("🚀 Starting keyless account creation...");
       const keylessManager = new AptosKeylessManager();
       console.log("📱 Keyless manager created, starting flow...");
-      await keylessManager.startKeylessFlow();
-      console.log("✅ Keyless flow started successfully");
-      // The user will be redirected to the OIDC provider
-      // The callback will be handled in the auth callback page
+      const loginUrl = keylessManager.startKeylessFlow();
+      console.log("✅ Keyless flow started successfully, redirecting to:", loginUrl);
+      
+      // Redirect to the OIDC provider
+      window.location.href = loginUrl;
     } catch (err) {
       console.error("🚨 Error starting keyless flow:", err);
       setError(err instanceof Error ? err.message : "Failed to start keyless flow");
@@ -300,10 +301,16 @@ export default function Dashboard() {
                           console.log("✅ Keyless manager created successfully");
                           
                           // Test if we can check existing accounts
-                          const existing = await keylessManager.getExistingKeylessAccount();
+                          const existing = keylessManager.getExistingKeylessAccount();
                           console.log("📋 Existing account check:", existing);
                           
-                          alert(`Keyless test completed! Check console for details.\nExisting account: ${existing ? 'Found' : 'Not found'}`);
+                          // Test ephemeral key pair generation
+                          console.log("🔑 Testing ephemeral key pair generation...");
+                          const { EphemeralKeyPair } = await import("@aptos-labs/ts-sdk");
+                          const testEkp = EphemeralKeyPair.generate();
+                          console.log("✅ Ephemeral key pair generated:", testEkp.nonce.substring(0, 10) + "...");
+                          
+                          alert(`Keyless test completed! Check console for details.\nExisting account: ${existing ? 'Found' : 'Not found'}\nEphemeral key pair: Generated successfully`);
                         } catch (error) {
                           console.error("🚨 Keyless test error:", error);
                           alert(`Keyless test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);

@@ -1,6 +1,5 @@
-import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { ACKeylessClient } from "@identity-connect/dapp-sdk";
-import { NetworkName } from "@identity-connect/api";
+import { Aptos, AptosConfig, Network, EphemeralKeyPair, KeylessAccount } from "@aptos-labs/ts-sdk";
+import { jwtDecode } from 'jwt-decode';
 
 export interface KeylessAccountInfo {
   address: string;
@@ -11,91 +10,217 @@ export interface KeylessAccountInfo {
   avatar?: string;
 }
 
+// Store the ephemeral key pair in localStorage
+const storeEphemeralKeyPair = (ekp: EphemeralKeyPair): void => {
+  localStorage.setItem("@aptos/ekp", encodeEphemeralKeyPair(ekp));
+};
+
+// Retrieve the ephemeral key pair from localStorage if it exists
+const getLocalEphemeralKeyPair = (): EphemeralKeyPair | undefined => {
+  try {
+    const encodedEkp = localStorage.getItem("@aptos/ekp");
+    return encodedEkp ? decodeEphemeralKeyPair(encodedEkp) : undefined;
+  } catch (error) {
+    console.warn("Failed to decode ephemeral key pair from localStorage", error);
+    return undefined;
+  }
+};
+
+// Stringify the ephemeral key pairs to be stored in localStorage
+const encodeEphemeralKeyPair = (ekp: EphemeralKeyPair): string =>
+  JSON.stringify(ekp, (_, e) => {
+    if (typeof e === "bigint") return { __type: "bigint", value: e.toString() };
+    if (e instanceof Uint8Array)
+      return { __type: "Uint8Array", value: Array.from(e) };
+    if (e instanceof EphemeralKeyPair)
+      return { __type: "EphemeralKeyPair", data: e.bcsToBytes() };
+    return e;
+  });
+
+// Parse the ephemeral key pairs from a string
+const decodeEphemeralKeyPair = (encodedEkp: string): EphemeralKeyPair =>
+  JSON.parse(encodedEkp, (_, e) => {
+    if (e && e.__type === "bigint") return BigInt(e.value);
+    if (e && e.__type === "Uint8Array") return new Uint8Array(e.value);
+    if (e && e.__type === "EphemeralKeyPair")
+      return EphemeralKeyPair.fromBytes(e.data);
+    return e;
+  });
+
+// Store the KeylessAccount in localStorage
+const storeKeylessAccount = (account: KeylessAccount): void => {
+  localStorage.setItem("@aptos/account", encodeKeylessAccount(account));
+};
+
+// Retrieve the KeylessAccount from localStorage if it exists
+const getLocalKeylessAccount = (): KeylessAccount | undefined => {
+  try {
+    const encodedAccount = localStorage.getItem("@aptos/account");
+    return encodedAccount ? decodeKeylessAccount(encodedAccount) : undefined;
+  } catch (error) {
+    console.warn("Failed to decode account from localStorage", error);
+    return undefined;
+  }
+};
+
+// Stringify the KeylessAccount to be stored in localStorage
+const encodeKeylessAccount = (account: KeylessAccount): string =>
+  JSON.stringify(account, (_, e) => {
+    if (typeof e === "bigint") return { __type: "bigint", value: e.toString() };
+    if (e instanceof Uint8Array)
+      return { __type: "Uint8Array", value: Array.from(e) };
+    if (e instanceof KeylessAccount)
+      return { __type: "KeylessAccount", data: e.bcsToBytes() };
+    return e;
+  });
+
+// Parse the KeylessAccount from a string
+const decodeKeylessAccount = (encodedAccount: string): KeylessAccount =>
+  JSON.parse(encodedAccount, (_, e) => {
+    if (e && e.__type === "bigint") return BigInt(e.value);
+    if (e && e.__type === "Uint8Array") return new Uint8Array(e.value);
+    if (e && e.__type === "KeylessAccount")
+      return KeylessAccount.fromBytes(e.data);
+    return e;
+  });
+
+// Parse JWT from URL fragment
+const parseJWTFromURL = (url: string): string | null => {
+  const urlObject = new URL(url);
+  const fragment = urlObject.hash.substring(1);
+  const params = new URLSearchParams(fragment);
+  return params.get('id_token');
+};
+
 export class AptosKeylessManager {
   private aptos: Aptos;
-  private keylessClient: ACKeylessClient;
 
   constructor() {
     const config = new AptosConfig({
       network: Network.MAINNET,
     });
     this.aptos = new Aptos(config);
-    
-    // Initialize Keyless Client
-    this.keylessClient = new ACKeylessClient({
-      dappName: "AptosPilot",
-      dappImageURI: "https://aptospilot.com/logo.png", // Optional: your app logo
-      defaultNetworkName: NetworkName.MAINNET,
-    });
   }
 
   /**
    * Start the keyless authentication flow
-   * This uses the modern Identity Connect SDK
+   * This follows the official Aptos Keyless integration guide
    */
-  async startKeylessFlow(): Promise<void> {
-    try {
-      console.log("Starting Keyless authentication flow...");
-      
-      // Connect to the keyless account
-      const result = await this.keylessClient.connect();
-      
-      console.log("Connection result:", result);
-      
-      // The user will be redirected to the OIDC provider
-      // The result will be handled in the callback
-    } catch (error) {
-      console.error("Error starting keyless flow:", error);
-      throw error;
-    }
+  startKeylessFlow(): string {
+    console.log("🚀 Starting keyless flow following official guide...");
+    
+    // 1. Create an ephemeral key pair
+    const ephemeralKeyPair = EphemeralKeyPair.generate();
+    console.log("✅ Ephemeral key pair generated");
+    
+    // 2. Store the EphemeralKeyPair in local storage
+    storeEphemeralKeyPair(ephemeralKeyPair);
+    console.log("✅ Ephemeral key pair stored in localStorage");
+    
+    // 3. Prepare the URL params
+    const redirectUri = `${window.location.origin}/auth/callback`;
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID!;
+    const nonce = ephemeralKeyPair.nonce;
+    
+    console.log("📋 OIDC params:", { redirectUri, clientId, nonce: nonce.substring(0, 10) + "..." });
+    
+    // 4. Construct the login URL
+    const loginUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=id_token&scope=openid+email+profile&nonce=${nonce}&redirect_uri=${encodeURIComponent(redirectUri)}&client_id=${clientId}`;
+    
+    console.log("🔗 Login URL created:", loginUrl);
+    
+    return loginUrl;
   }
 
   /**
-   * Handle the authentication callback and create keyless account
-   * This uses the modern Identity Connect SDK
+   * Handle the OIDC callback and create keyless account
+   * This follows the official Aptos Keyless integration guide
    */
   async handleCallback(): Promise<KeylessAccountInfo> {
     try {
-      console.log("Handling Keyless callback...");
-      console.log("Current URL:", window.location.href);
+      console.log("🔄 Handling OIDC callback...");
+      console.log("📍 Current URL:", window.location.href);
       
-      // Check if connected
-      const isConnected = await this.keylessClient.isConnected();
-      
-      if (!isConnected) {
-        throw new Error("Not connected to keyless account");
+      // 1. Extract JWT from URL
+      const jwt = parseJWTFromURL(window.location.href);
+      if (!jwt) {
+        console.error("❌ No JWT found in URL");
+        throw new Error("No JWT found in URL. Please try signing in again.");
       }
-
-      console.log("Successfully connected to keyless account");
-
-      // Get connected accounts
-      const accounts = await this.keylessClient.getConnectedAccounts();
       
-      if (!accounts.accounts || accounts.accounts.length === 0) {
-        throw new Error("No connected accounts found");
+      console.log("✅ JWT extracted, length:", jwt.length);
+      
+      // 2. Decode JWT and extract nonce
+      const payload = jwtDecode<{ nonce: string; email: string; name?: string; picture?: string }>(jwt);
+      const jwtNonce = payload.nonce;
+      const email = payload.email;
+      const name = payload.name;
+      const avatar = payload.picture;
+      
+      console.log("📋 JWT payload:", { nonce: jwtNonce.substring(0, 10) + "...", email, name });
+      
+      if (!jwtNonce) {
+        throw new Error("No nonce found in JWT token");
       }
-
-      const account = accounts.accounts[0];
-      console.log("Connected account:", account);
-
-      // Get account info
-      const address = account.accountAddress;
-      const publicKey = account.accountPublicKeyB64;
       
-      console.log("Account address:", address);
-      console.log("Public key:", publicKey);
-
-      // Get balance
+      if (!email) {
+        throw new Error("No email found in JWT token");
+      }
+      
+      // 3. Fetch and validate EphemeralKeyPair
+      const ekp = getLocalEphemeralKeyPair();
+      if (!ekp) {
+        throw new Error("Ephemeral key pair not found. Please try signing in again.");
+      }
+      
+      if (ekp.nonce !== jwtNonce) {
+        console.error("❌ Nonce mismatch:", { jwtNonce: jwtNonce.substring(0, 10) + "...", ekpNonce: ekp.nonce.substring(0, 10) + "..." });
+        throw new Error("Nonce mismatch. Please try signing in again.");
+      }
+      
+      if (ekp.isExpired()) {
+        throw new Error("Ephemeral key pair expired. Please try signing in again.");
+      }
+      
+      console.log("✅ Ephemeral key pair validated");
+      
+      // 4. Derive KeylessAccount using official SDK
+      console.log("🔐 Deriving keyless account...");
+      const keylessAccount = await this.aptos.deriveKeylessAccount({
+        jwt,
+        ephemeralKeyPair: ekp,
+      });
+      
+      console.log("✅ Keyless account derived successfully");
+      
+      // 5. Store the KeylessAccount in localStorage
+      storeKeylessAccount(keylessAccount);
+      console.log("✅ Keyless account stored in localStorage");
+      
+      // 6. Get account info
+      const address = keylessAccount.accountAddress.toString();
+      const publicKey = keylessAccount.publicKey.toString();
+      
+      console.log("📋 Account info:", { address, publicKey: publicKey.substring(0, 20) + "..." });
+      
+      // 7. Get balance
       const balance = await this.getAccountBalance(address);
-
-      console.log("Account balance:", balance);
-
-      // For now, we'll use placeholder user info
-      // In a real implementation, you'd get this from the OIDC provider
-      const email = window.localStorage.getItem("aptos_user_email") || "user@example.com";
-      const name = window.localStorage.getItem("aptos_user_name") || "User";
-      const avatar = window.localStorage.getItem("aptos_user_avatar") || "";
-
+      console.log("💰 Account balance:", balance);
+      
+      // 8. Store user info in localStorage
+      if (email) {
+        window.localStorage.setItem("aptos_user_email", email);
+      }
+      if (name) {
+        window.localStorage.setItem("aptos_user_name", name);
+      }
+      if (avatar) {
+        window.localStorage.setItem("aptos_user_avatar", avatar);
+      }
+      
+      // 9. Clear ephemeral key pair (no longer needed)
+      localStorage.removeItem("@aptos/ekp");
+      
       return {
         address,
         publicKey,
@@ -105,47 +230,41 @@ export class AptosKeylessManager {
         avatar,
       };
     } catch (error) {
-      console.error("Error handling keyless callback:", error);
+      console.error("🚨 Error handling keyless callback:", error);
       throw error;
     }
   }
 
   /**
-   * Get existing keyless account
+   * Get existing keyless account from localStorage
    */
-  async getExistingKeylessAccount(): Promise<KeylessAccountInfo | null> {
+  getExistingKeylessAccount(): KeylessAccountInfo | null {
     try {
-      // Check if connected
-      const isConnected = await this.keylessClient.isConnected();
+      console.log("🔍 Checking for existing keyless account...");
+      const keylessAccount = getLocalKeylessAccount();
       
-      if (!isConnected) {
+      if (!keylessAccount) {
+        console.log("❌ No existing keyless account found");
         return null;
       }
-
-      // Get connected accounts
-      const accounts = await this.keylessClient.getConnectedAccounts();
       
-      if (!accounts.accounts || accounts.accounts.length === 0) {
-        return null;
-      }
-
-      const account = accounts.accounts[0];
-
+      console.log("✅ Found existing keyless account");
+      
       // Get user info from localStorage
       const email = window.localStorage.getItem("aptos_user_email") || "";
       const name = window.localStorage.getItem("aptos_user_name") || "";
       const avatar = window.localStorage.getItem("aptos_user_avatar") || "";
-
+      
       return {
-        address: account.accountAddress,
-        publicKey: account.accountPublicKeyB64,
+        address: keylessAccount.accountAddress.toString(),
+        publicKey: keylessAccount.publicKey.toString(),
         balance: "0", // Will be updated when needed
         email,
         name,
         avatar,
       };
     } catch (error) {
-      console.error("Error getting existing keyless account:", error);
+      console.error("🚨 Error getting existing keyless account:", error);
       return null;
     }
   }
@@ -182,20 +301,15 @@ export class AptosKeylessManager {
   /**
    * Sign out and clear stored data
    */
-  async signOut(): Promise<void> {
-    try {
-      await this.keylessClient.disconnect();
-      
-      // Clear localStorage
-      window.localStorage.removeItem("aptos_user_email");
-      window.localStorage.removeItem("aptos_user_name");
-      window.localStorage.removeItem("aptos_user_avatar");
-      window.localStorage.removeItem("aptos_google_signed_in");
-      
-      console.log("Signed out successfully");
-    } catch (error) {
-      console.error("Error signing out:", error);
-    }
+  signOut(): void {
+    console.log("🚪 Signing out and clearing data...");
+    localStorage.removeItem("@aptos/ekp");
+    localStorage.removeItem("@aptos/account");
+    localStorage.removeItem("aptos_user_email");
+    localStorage.removeItem("aptos_user_name");
+    localStorage.removeItem("aptos_user_avatar");
+    localStorage.removeItem("aptos_google_signed_in");
+    console.log("✅ Sign out completed");
   }
 
   /**
@@ -203,12 +317,5 @@ export class AptosKeylessManager {
    */
   getAptos(): Aptos {
     return this.aptos;
-  }
-
-  /**
-   * Get the Keyless Client instance
-   */
-  getKeylessClient(): ACKeylessClient {
-    return this.keylessClient;
   }
 } 
