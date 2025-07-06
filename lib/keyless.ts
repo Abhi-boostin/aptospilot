@@ -55,11 +55,49 @@ export const clearKeylessAccount = (): void => {
 };
 
 /**
- * Parse JWT from URL fragment
+ * Parse JWT from URL fragment or query parameters
+ * Handles different OIDC redirect formats
  */
 export const parseJWTFromURL = (url: string): string | null => {
-  const urlObject = new URL(url);
-  const fragment = urlObject.hash.substring(1);
-  const params = new URLSearchParams(fragment);
-  return params.get('id_token');
+  try {
+    const urlObject = new URL(url);
+    
+    // Try to get JWT from URL fragment first (most common)
+    if (urlObject.hash) {
+      const fragment = urlObject.hash.substring(1);
+      const params = new URLSearchParams(fragment);
+      const idToken = params.get('id_token');
+      if (idToken) {
+        console.log("Found JWT in URL fragment");
+        return idToken;
+      }
+    }
+    
+    // Try to get JWT from query parameters (fallback)
+    const idToken = urlObject.searchParams.get('id_token');
+    if (idToken) {
+      console.log("Found JWT in query parameters");
+      return idToken;
+    }
+    
+    // Try to get JWT from access_token (some OIDC providers)
+    const accessToken = urlObject.searchParams.get('access_token');
+    if (accessToken) {
+      console.log("Found access_token, using as JWT");
+      return accessToken;
+    }
+    
+    // Debug: log the URL structure
+    console.log("URL structure:", {
+      href: urlObject.href,
+      hash: urlObject.hash,
+      search: urlObject.search,
+      searchParams: Object.fromEntries(urlObject.searchParams.entries())
+    });
+    
+    return null;
+  } catch (error) {
+    console.error("Error parsing JWT from URL:", error);
+    return null;
+  }
 }; 

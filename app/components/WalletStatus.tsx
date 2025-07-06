@@ -1,6 +1,6 @@
 "use client";
 
-import { Wallet, Network, Coins, Key, Shield } from "lucide-react";
+import { Wallet, Network, Coins, Key, Shield, DollarSign } from "lucide-react";
 
 interface WalletStatusProps {
   network: string;
@@ -8,9 +8,19 @@ interface WalletStatusProps {
   walletType: "keyless" | "petra" | null;
   address?: string;
   publicKey?: string;
+  aptPrice?: number;
+  usdBalance?: number;
 }
 
-export default function WalletStatus({ network, balance, walletType, address, publicKey }: WalletStatusProps) {
+export default function WalletStatus({ 
+  network, 
+  balance, 
+  walletType, 
+  address, 
+  publicKey, 
+  aptPrice = 0, 
+  usdBalance = 0 
+}: WalletStatusProps) {
   const getNetworkColor = (net: string) => {
     switch (net) {
       case "mainnet": return "bg-green-100 text-green-800 border-green-200";
@@ -34,7 +44,7 @@ export default function WalletStatus({ network, balance, walletType, address, pu
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
       {/* Network Status */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center gap-3 mb-3">
@@ -51,20 +61,46 @@ export default function WalletStatus({ network, balance, walletType, address, pu
         </div>
       </div>
 
-      {/* Balance */}
+      {/* APT Balance */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
             <Coins className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900">Balance</h3>
-            <p className="text-sm text-gray-500">Available APT</p>
+            <h3 className="font-semibold text-gray-900">APT Balance</h3>
+            <p className="text-sm text-gray-500">Available tokens</p>
           </div>
         </div>
         <div className="text-2xl font-bold text-gray-900">
           {(parseFloat(balance) / 100000000).toFixed(4)} APT
         </div>
+        {aptPrice > 0 && (
+          <div className="text-sm text-gray-500 mt-1">
+            ${aptPrice.toFixed(2)} per APT
+          </div>
+        )}
+      </div>
+
+      {/* USD Balance */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+            <DollarSign className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">USD Value</h3>
+            <p className="text-sm text-gray-500">Current worth</p>
+          </div>
+        </div>
+        <div className="text-2xl font-bold text-gray-900">
+          ${usdBalance.toFixed(2)}
+        </div>
+        {usdBalance > 0 && (
+          <div className="text-sm text-gray-500 mt-1">
+            Live price
+          </div>
+        )}
       </div>
 
       {/* Wallet Type */}

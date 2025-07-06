@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { AptosKeylessManager } from "@/lib/aptos-keyless";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
-import { Loader2, MessageSquare, Wallet, Key, Bot } from "lucide-react";
+import { Loader2, MessageSquare, Wallet, Key, Bot, LogOut, DollarSign } from "lucide-react";
 import AuthSection from "./AuthSection";
 import WalletStatus from "./WalletStatus";
 import WalletOptions from "./WalletOptions";
@@ -28,36 +28,123 @@ interface KeylessAccountInfoType {
 
 export default function Dashboard() {
   const router = useRouter();
-  const { account: petraAccount, connected: petraConnected } = useWallet();
+  const { account: petraAccount, connected: petraConnected, disconnect: disconnectPetra } = useWallet();
   const [network, setNetwork] = useState("mainnet");
   const [keylessAccount, setKeylessAccount] = useState<KeylessAccountInfoType | null>(null);
   const [walletType, setWalletType] = useState<"keyless" | "petra" | null>(null);
   const [balance, setBalance] = useState<string>("0");
+  const [aptPrice, setAptPrice] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSignedIn, setIsSignedIn] = useState(false);
+
+  // Fetch APT price
+  useEffect(() => {
+    const fetchAptPrice = async () => {
+      try {
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=aptos&vs_currencies=usd');
+        const data = await response.json();
+        setAptPrice(data.aptos.usd);
+      } catch (error) {
+        console.error('Failed to fetch APT price:', error);
+        setAptPrice(0);
+      }
+    };
+
+    fetchAptPrice();
+    const interval = setInterval(fetchAptPrice, 30000); // Update every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const signedIn = window.localStorage.getItem("aptos_google_signed_in");
     setIsSignedIn(!!signedIn);
   }, []);
 
+  // Check for existing keyless account on mount
+  useEffect(() => {
+    const checkExistingKeyless = async () => {
+      try {
+        console.log("🔍 Checking for existing keyless account...");
+        const keylessManager = new AptosKeylessManager();
+        const existingAccount = await keylessManager.getExistingKeylessAccount();
+        console.log("📋 Existing keyless account result:", existingAccount);
+        if (existingAccount) {
+          console.log("✅ Found existing keyless account:", existingAccount.address);
+          setKeylessAccount(existingAccount);
+          setWalletType("keyless");
+        } else {
+          console.log("❌ No existing keyless account found");
+        }
+      } catch (error) {
+        console.error("🚨 Error checking existing keyless account:", error);
+      }
+    };
+
+    if (isSignedIn) {
+      checkExistingKeyless();
+    }
+  }, [isSignedIn]);
+
+  // Check for success parameter from callback
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const success = urlParams.get('success');
+    
+    if (success === 'true') {
+      // Clear the success parameter from URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Check for existing keyless account
+      const checkExistingKeyless = async () => {
+        try {
+          const keylessManager = new AptosKeylessManager();
+          const existingAccount = await keylessManager.getExistingKeylessAccount();
+          if (existingAccount) {
+            setKeylessAccount(existingAccount);
+            setWalletType("keyless");
+          }
+        } catch (error) {
+          console.error("Error checking existing keyless account:", error);
+        }
+      };
+      
+      checkExistingKeyless();
+    }
+  }, []);
+
   const handleCreateKeyless = async () => {
     setLoading(true);
     setError(null);
     try {
+      console.log("🚀 Starting keyless account creation...");
       const keylessManager = new AptosKeylessManager();
-      const accountInfo = await keylessManager.handleCallback();
-      setKeylessAccount(accountInfo);
-      setWalletType("keyless");
-      // Store the real Google email in localStorage for session continuity
-      if (accountInfo.email) {
-        window.localStorage.setItem("aptos_user_email", accountInfo.email);
-      }
+      console.log("📱 Keyless manager created, starting flow...");
+      await keylessManager.startKeylessFlow();
+      console.log("✅ Keyless flow started successfully");
+      // The user will be redirected to the OIDC provider
+      // The callback will be handled in the auth callback page
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create keyless account");
-    } finally {
+      console.error("🚨 Error starting keyless flow:", err);
+      setError(err instanceof Error ? err.message : "Failed to start keyless flow");
       setLoading(false);
+    }
+  };
+
+  // Disconnect wallet function
+  const handleDisconnectWallet = async () => {
+    try {
+      if (walletType === "keyless") {
+        const keylessManager = new AptosKeylessManager();
+        await keylessManager.signOut();
+        setKeylessAccount(null);
+      } else if (walletType === "petra") {
+        await disconnectPetra();
+      }
+      setWalletType(null);
+      setBalance("0");
+    } catch (error) {
+      console.error("Error disconnecting wallet:", error);
     }
   };
 
@@ -99,9 +186,9 @@ export default function Dashboard() {
     }
   }, [petraConnected, petraAccount]);
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
     const keylessManager = new AptosKeylessManager();
-    keylessManager.signOut();
+    await keylessManager.signOut();
     window.localStorage.removeItem("aptos_google_signed_in");
     window.localStorage.removeItem("aptos_user_email");
     setIsSignedIn(false);
@@ -121,6 +208,12 @@ export default function Dashboard() {
           : petraAccount.address.toString();
     }
     return "";
+  };
+
+  // Calculate USD balance
+  const getUsdBalance = () => {
+    const aptBalance = parseFloat(balance) / 100000000; // Convert from octas to APT
+    return aptBalance * aptPrice;
   };
 
   if (loading) {
@@ -157,13 +250,27 @@ export default function Dashboard() {
           <div className="space-y-6">
             {/* Wallet Status - Show when wallet is connected */}
             {(walletType === "keyless" || walletType === "petra") && (
-              <WalletStatus
-                network={network}
-                balance={balance}
-                walletType={walletType}
-                address={getCurrentAddress()}
-                publicKey={keylessAccount?.publicKey}
-              />
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold text-gray-900">Wallet Status</h2>
+                  <button
+                    onClick={handleDisconnectWallet}
+                    className="flex items-center gap-2 text-red-600 hover:text-red-700 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span className="text-sm font-medium">Disconnect</span>
+                  </button>
+                </div>
+                <WalletStatus
+                  network={network}
+                  balance={balance}
+                  walletType={walletType}
+                  address={getCurrentAddress()}
+                  publicKey={keylessAccount?.publicKey}
+                  aptPrice={aptPrice}
+                  usdBalance={getUsdBalance()}
+                />
+              </div>
             )}
 
             {/* Network Switcher - Show when wallet is connected */}
@@ -175,7 +282,43 @@ export default function Dashboard() {
 
             {/* Wallet Options - Show when no wallet is connected */}
             {!walletType && (
-              <WalletOptions onCreateKeyless={handleCreateKeyless} />
+              <div className="space-y-4">
+                <WalletOptions onCreateKeyless={handleCreateKeyless} />
+                
+                {/* Test Keyless Account */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <h3 className="font-semibold text-gray-900 mb-4">Test Keyless Account</h3>
+                  <div className="space-y-3">
+                    <button
+                      onClick={async () => {
+                        try {
+                          console.log("🧪 Testing keyless account creation...");
+                          const keylessManager = new AptosKeylessManager();
+                          console.log("📱 Keyless manager:", keylessManager);
+                          
+                          // Test if we can create the manager
+                          console.log("✅ Keyless manager created successfully");
+                          
+                          // Test if we can check existing accounts
+                          const existing = await keylessManager.getExistingKeylessAccount();
+                          console.log("📋 Existing account check:", existing);
+                          
+                          alert(`Keyless test completed! Check console for details.\nExisting account: ${existing ? 'Found' : 'Not found'}`);
+                        } catch (error) {
+                          console.error("🚨 Keyless test error:", error);
+                          alert(`Keyless test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                        }
+                      }}
+                      className="w-full bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg transition-colors"
+                    >
+                      Test Keyless Account
+                    </button>
+                    <p className="text-xs text-gray-500">
+                      Click to test keyless account functionality and check console for detailed logs.
+                    </p>
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* AI Chat Section */}
@@ -223,12 +366,29 @@ export default function Dashboard() {
                       <span className="text-gray-900 font-medium capitalize">{network}</span>
                     </div>
                     {walletType && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600">Balance:</span>
-                        <span className="text-gray-900 font-medium">
-                          {(parseFloat(balance) / 100000000).toFixed(4)} APT
-                        </span>
-                      </div>
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">APT Balance:</span>
+                          <span className="text-gray-900 font-medium">
+                            {(parseFloat(balance) / 100000000).toFixed(4)} APT
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600 flex items-center gap-1">
+                            <DollarSign className="w-3 h-3" />
+                            USD Value:
+                          </span>
+                          <span className="text-gray-900 font-medium">
+                            ${getUsdBalance().toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">APT Price:</span>
+                          <span className="text-gray-900 font-medium">
+                            ${aptPrice.toFixed(2)}
+                          </span>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
@@ -251,11 +411,11 @@ export default function Dashboard() {
                     </li>
                     <li className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                      <span>Multi-Network Support</span>
+                      <span>Live Balance & Price Updates</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                      <span>AI-Powered Assistant</span>
+                      <span>Multi-Network Support</span>
                     </li>
                   </ul>
                 </div>
