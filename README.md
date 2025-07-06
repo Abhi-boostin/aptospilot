@@ -1,15 +1,147 @@
 # AptosPilot - Google Authentication & Aptos Keyless Integration
 
-A Next.js application that demonstrates **Google OAuth authentication** and **Aptos Keyless account creation**. Users can sign in with Google and automatically create a permanent Aptos blockchain account tied to their Google credentials.
+A modern Next.js dApp that supports Aptos Keyless accounts via Google sign-in and Petra Wallet connection, featuring an AI-powered chat assistant for Aptos blockchain information.
 
-## 🚀 Features
+## Features
 
-- 🔐 **Google OAuth authentication** using NextAuth.js
-- 🚀 **Aptos Keyless account creation** from Google JWT tokens
-- 💰 **Real-time balance display** from Aptos mainnet
-- 🎨 **Modern UI** with Tailwind CSS
-- 📱 **Responsive design** for all devices
-- 🔒 **Secure account derivation** using cryptographic techniques
+### 🔐 Authentication
+- **Google OAuth Integration**: Seamless sign-in with Google accounts
+- **Aptos Keyless Accounts**: No seed phrases required, secured by Google account
+- **Petra Wallet Support**: Traditional wallet connection for advanced users
+- **Dual Wallet Options**: Choose between keyless or traditional wallet after sign-in
+
+### 🤖 AI-Powered Assistant
+- **Gemini AI Integration**: Powered by Google's Gemini Pro model
+- **Aptos Expert Knowledge**: Specialized in Aptos blockchain ecosystem
+- **Real-time Responses**: Get instant answers about:
+  - Move language and smart contract development
+  - Aptos architecture and DeFi protocols
+  - Wallet integration and keyless accounts
+  - Latest ecosystem updates and news
+  - Technical troubleshooting and best practices
+- **Suggested Questions**: Quick-start prompts for common queries
+- **Rate Limiting**: Protected against abuse (10 requests/minute)
+
+### 💰 Wallet Features
+- **Live Balance Display**: Real-time APT balance with USD conversion
+- **Network Switching**: Support for mainnet and testnet
+- **Transaction History**: View recent transactions
+- **Keyless Account Management**: Easy recovery and account management
+
+### 🎨 Modern UI
+- **Glassmorphic Design**: Beautiful, modern interface
+- **Responsive Layout**: Works on desktop and mobile
+- **Real-time Updates**: Live price feeds and balance updates
+- **Error Handling**: Graceful error states and user feedback
+
+## Getting Started
+
+### Prerequisites
+- Node.js 18+ 
+- npm or yarn
+- Google OAuth credentials
+- Gemini API key
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd aptospilot
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Configure environment variables**
+   Create a `.env` file with:
+   ```env
+   NEXTAUTH_URL=http://localhost:3000
+   NEXTAUTH_SECRET=your-random-secret
+   GOOGLE_CLIENT_ID=your-google-client-id
+   GOOGLE_CLIENT_SECRET=your-google-client-secret
+   APTOS_NODE_URL=https://fullnode.mainnet.aptoslabs.com/v1
+   NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id
+   GEMINI_API_KEY=your-gemini-api-key
+   ```
+
+4. **Run the development server**
+   ```bash
+   npm run dev
+   ```
+
+5. **Open your browser**
+   Navigate to `http://localhost:3000`
+
+## Usage
+
+### Sign-in Flow
+1. Click "Sign in with Google"
+2. Complete Google OAuth
+3. Choose your wallet option:
+   - **Create Keyless Wallet**: No seed phrase, secured by Google
+   - **Connect Petra Wallet**: Traditional wallet with full control
+
+### AI Assistant
+1. Click the chat icon in the dashboard
+2. Ask questions about Aptos, Move language, DeFi, etc.
+3. Use suggested questions for quick start
+4. Get real-time, expert responses powered by Gemini AI
+
+### Wallet Management
+- View live balance and USD value
+- Switch between networks
+- Disconnect and reconnect wallets
+- Manage keyless account settings
+
+## API Endpoints
+
+### AI Chat (`/api/ai/chat`)
+- **Method**: POST
+- **Body**: `{ "message": "string" }`
+- **Response**: `{ "response": "string", "timestamp": "string" }`
+- **Rate Limit**: 10 requests per minute per IP
+
+## Architecture
+
+### Frontend
+- **Next.js 15**: App Router with TypeScript
+- **Tailwind CSS**: Styling and responsive design
+- **Aptos SDK**: Blockchain integration
+- **Google Generative AI**: AI chat functionality
+
+### Backend
+- **Next.js API Routes**: Server-side API endpoints
+- **Gemini AI**: Natural language processing
+- **Rate Limiting**: In-memory rate limiting (production: use Redis)
+
+## Security Features
+
+- **Server-side API Keys**: Gemini API key never exposed to client
+- **Rate Limiting**: Prevents API abuse
+- **Input Validation**: Message length and type validation
+- **Error Handling**: Graceful error states without exposing internals
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License.
+
+## Support
+
+For support and questions:
+- Check the AI assistant in the app
+- Review the Aptos documentation
+- Open an issue on GitHub
 
 ## 🏗️ How Keyless Accounts Work
 

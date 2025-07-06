@@ -17,6 +17,7 @@
     "@aptos-labs/wallet-adapter-react": "^7.0.1",
     "@auth/core": "^0.40.0",
     "@auth/nextjs": "^0.0.0-380f8d56",
+    "@google/genai": "^1.8.0",
     "@identity-connect/dapp-sdk": "^0.11.0",
     "@wallet-standard/core": "^1.1.1",
     "aptos": "^1.21.0",

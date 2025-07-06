@@ -42,11 +42,27 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchAptPrice = async () => {
       try {
-        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=aptos&vs_currencies=usd');
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=aptos&vs_currencies=usd', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
-        setAptPrice(data.aptos.usd);
+        if (data.aptos && data.aptos.usd) {
+          setAptPrice(data.aptos.usd);
+        } else {
+          console.warn('Invalid APT price data received:', data);
+          setAptPrice(0);
+        }
       } catch (error) {
         console.error('Failed to fetch APT price:', error);
+        // Set a fallback price or keep the previous value
         setAptPrice(0);
       }
     };
@@ -60,31 +76,6 @@ export default function Dashboard() {
     const signedIn = window.localStorage.getItem("aptos_google_signed_in");
     setIsSignedIn(!!signedIn);
   }, []);
-
-  // Check for existing keyless account on mount
-  useEffect(() => {
-    const checkExistingKeyless = async () => {
-      try {
-        console.log("🔍 Checking for existing keyless account...");
-        const keylessManager = new AptosKeylessManager();
-        const existingAccount = await keylessManager.getExistingKeylessAccount();
-        console.log("📋 Existing keyless account result:", existingAccount);
-        if (existingAccount) {
-          console.log("✅ Found existing keyless account:", existingAccount.address);
-          setKeylessAccount(existingAccount);
-          setWalletType("keyless");
-        } else {
-          console.log("❌ No existing keyless account found");
-        }
-      } catch (error) {
-        console.error("🚨 Error checking existing keyless account:", error);
-      }
-    };
-
-    if (isSignedIn) {
-      checkExistingKeyless();
-    }
-  }, [isSignedIn]);
 
   // Check for success parameter from callback
   useEffect(() => {
@@ -113,6 +104,7 @@ export default function Dashboard() {
     }
   }, []);
 
+  // Only create/check keyless account when user clicks the button
   const handleCreateKeyless = async () => {
     setLoading(true);
     setError(null);
@@ -122,7 +114,6 @@ export default function Dashboard() {
       console.log("📱 Keyless manager created, starting flow...");
       const loginUrl = keylessManager.startKeylessFlow();
       console.log("✅ Keyless flow started successfully, redirecting to:", loginUrl);
-      
       // Redirect to the OIDC provider
       window.location.href = loginUrl;
     } catch (err) {
