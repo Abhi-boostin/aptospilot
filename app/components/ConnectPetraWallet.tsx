@@ -1,65 +1,47 @@
 "use client";
 
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
-import { useState } from "react";
+import { Wallet } from "lucide-react";
 
 export default function ConnectPetraWallet() {
-  const { connect, disconnect, account, connected, isLoading } = useWallet();
-  const [localError, setLocalError] = useState<string | null>(null);
+  const { connect, connected, disconnect, wallets } = useWallet();
 
-  const handleConnect = async () => {
-    setLocalError(null);
-    try {
-      await connect("Petra");
-    } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Failed to connect");
-    }
-  };
+  const petraWallet = wallets.find(wallet => wallet.name === "Petra");
 
-  // Safely render the address as a string
-  let addressString = "";
-  if (account?.address) {
-    if (typeof account.address === "string") {
-      addressString = account.address;
-    } else if (account.address.data) {
-      // If address is { data: Uint8Array }
-      try {
-        addressString = Buffer.from(account.address.data).toString("hex");
-      } catch {
-        addressString = JSON.stringify(account.address.data);
-      }
-    } else if (account.address.toString) {
-      addressString = account.address.toString();
-    } else {
-      addressString = JSON.stringify(account.address);
-    }
+  if (!petraWallet) {
+    return (
+      <div className="text-center p-4 bg-gray-50 rounded-lg">
+        <Wallet className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+        <p className="text-sm text-gray-600 mb-2">Petra Wallet not found</p>
+        <a
+          href="https://petra.app/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+        >
+          Install Petra Wallet
+        </a>
+      </div>
+    );
   }
 
-  if (isLoading) return <button disabled>Loading...</button>;
+  if (connected) {
+    return (
+      <button
+        onClick={() => disconnect()}
+        className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors font-medium"
+      >
+        Disconnect Petra
+      </button>
+    );
+  }
 
-  return connected ? (
-    <div className="flex items-center gap-2">
-      <span className="font-mono text-xs">Connected: {addressString}</span>
-      <button
-        onClick={disconnect}
-        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded"
-      >
-        Disconnect
-      </button>
-    </div>
-  ) : (
-    <div>
-      <button
-        onClick={handleConnect}
-        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-      >
-        Connect Petra Wallet
-      </button>
-      {localError && (
-        <div className="text-red-600 text-xs mt-2">
-          {localError}
-        </div>
-      )}
-    </div>
+  return (
+    <button
+      onClick={() => connect(petraWallet.name)}
+      className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg transition-colors font-medium"
+    >
+      Connect Petra Wallet
+    </button>
   );
 } 

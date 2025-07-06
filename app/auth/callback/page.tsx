@@ -17,6 +17,9 @@ export default function AuthCallback() {
         // Handle the OIDC callback and create keyless account
         const accountInfo = await keylessManager.handleCallback();
         
+        // Set the Google sign-in flag to prevent redirect loop
+        window.localStorage.setItem("aptos_google_signed_in", "true");
+        
         console.log("Keyless account created successfully:", accountInfo);
         
         // Redirect to dashboard with success
