@@ -13,6 +13,7 @@ import AIChat from "./AIChat";
 import NetworkSwitcher from "./NetworkSwitcher";
 import ErrorDisplay from "./ErrorDisplay";
 import SendAptModal from "./SendAptModal";
+import axios from "axios";
 
 const NETWORKS = [
   { label: "Mainnet", value: "mainnet", endpoint: "https://api.mainnet.aptoslabs.com/v1", sdk: Network.MAINNET },
@@ -44,18 +45,10 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchAptPrice = async () => {
       try {
-        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=aptos&vs_currencies=usd', {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          },
+        const { data } = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
+          params: { ids: 'aptos', vs_currencies: 'usd' },
+          headers: { Accept: 'application/json' },
         });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
         if (data.aptos && data.aptos.usd) {
           setAptPrice(data.aptos.usd);
         } else {
@@ -64,13 +57,12 @@ export default function Dashboard() {
         }
       } catch (error) {
         console.error('Failed to fetch APT price:', error);
-        // Set a fallback price or keep the previous value
         setAptPrice(0);
       }
     };
 
     fetchAptPrice();
-    const interval = setInterval(fetchAptPrice, 30000); // Update every 30 seconds
+    const interval = setInterval(fetchAptPrice, 30000);
     return () => clearInterval(interval);
   }, []);
 

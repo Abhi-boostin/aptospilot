@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User, Loader2, AlertCircle } from "lucide-react";
+import axios from "axios";
 
 interface Message {
   id: string;
@@ -65,21 +66,9 @@ export default function AIChat() {
     setError(null);
 
     try {
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message: textToSend }),
-      });
+      const { data } = await axios.post('/api/ai/chat', { message: textToSend });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      if (data.error) {
+      if (data?.error) {
         throw new Error(data.error);
       }
 
@@ -91,11 +80,10 @@ export default function AIChat() {
       };
       
       setMessages(prev => [...prev, aiMessage]);
-    } catch (err) {
+    } catch (err: any) {
       console.error('AI Chat Error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to get AI response');
+      setError(err?.message || 'Failed to get AI response');
       
-      // Add error message to chat
       const errorMessage: Message = {
         id: generateMessageId(),
         content: "I apologize, but I'm having trouble connecting to my AI service right now. Please try again in a moment, or check your internet connection.",

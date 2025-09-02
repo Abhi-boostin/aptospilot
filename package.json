@@ -21,6 +21,7 @@
     "@identity-connect/dapp-sdk": "^0.11.0",
     "@wallet-standard/core": "^1.1.1",
     "aptos": "^1.21.0",
+    "axios": "^1.11.0",
     "framer-motion": "^12.23.0",
     "got": "^14.4.7",
     "jose": "^6.0.11",
