@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { AptosKeylessManager } from "@/lib/aptos-keyless";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
-import { Loader2, MessageSquare, Wallet, Key, Bot, LogOut, DollarSign } from "lucide-react";
+import { Loader2, MessageSquare, Wallet, Key, Bot, LogOut, DollarSign, Send } from "lucide-react";
 import AuthSection from "./AuthSection";
 import WalletStatus from "./WalletStatus";
 import WalletOptions from "./WalletOptions";
 import AIChat from "./AIChat";
 import NetworkSwitcher from "./NetworkSwitcher";
 import ErrorDisplay from "./ErrorDisplay";
+import SendAptModal from "./SendAptModal";
 
 const NETWORKS = [
   { label: "Mainnet", value: "mainnet", endpoint: "https://api.mainnet.aptoslabs.com/v1", sdk: Network.MAINNET },
@@ -37,6 +38,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSignedIn, setIsSignedIn] = useState(false);
+  const [showSendAptModal, setShowSendAptModal] = useState(false);
 
   // Fetch APT price
   useEffect(() => {
@@ -386,6 +388,16 @@ export default function Dashboard() {
                             ${aptPrice.toFixed(2)}
                           </span>
                         </div>
+                        {/* Send APT Button - Only show when wallet is connected */}
+                        <div className="pt-3 border-t border-gray-200">
+                          <button
+                            onClick={() => setShowSendAptModal(true)}
+                            className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                          >
+                            <Send className="w-4 h-4" />
+                            Send APT
+                          </button>
+                        </div>
                       </>
                     )}
                   </div>
@@ -421,6 +433,16 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* Send APT Modal */}
+        <SendAptModal
+          isOpen={showSendAptModal}
+          onClose={() => setShowSendAptModal(false)}
+          walletType={walletType}
+          keylessAccount={keylessAccount}
+          network={network}
+          aptPrice={aptPrice}
+        />
       </div>
     </div>
   );

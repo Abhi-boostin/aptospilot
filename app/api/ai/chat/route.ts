@@ -1,10 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 
+// Simple in-memory rate limit (per-process)
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 10;
+const rateBucket: Record<string, { count: number; ts: number }> = {};
+
+function rateLimit(ip: string) {
+  const now = Date.now();
+  const slot = rateBucket[ip] ?? { count: 0, ts: now };
+  if (now - slot.ts > RATE_LIMIT_WINDOW_MS) {
+    rateBucket[ip] = { count: 1, ts: now };
+    return;
+  }
+  if (slot.count >= RATE_LIMIT_MAX_REQUESTS) {
+    throw new Error('Rate limit exceeded');
+  }
+  slot.count += 1;
+  rateBucket[ip] = slot;
+}
+
 export async function POST(request: NextRequest) {
   console.log('🚀 AI Chat API called');
   
   try {
+    // Throttle per IP
+    const ip = request.ip || 'unknown';
+    rateLimit(ip);
+
     const body = await request.json();
     console.log('📨 Request body:', body);
     
@@ -19,7 +42,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('✅ Message validated:', message.substring(0, 50) + '...');
+    // Cap input length
+    const trimmed = message.trim().slice(0, 1_000);
+
+    console.log('✅ Message validated:', trimmed.substring(0, 50) + '...');
 
     // Check if API key is available
     if (!process.env.GEMINI_API_KEY) {
@@ -42,7 +68,7 @@ export async function POST(request: NextRequest) {
         {
           role: 'user',
           parts: [
-            { text: `You are an expert AI assistant specializing in the Aptos blockchain ecosystem. Answer the following user question as an Aptos expert:\n\n${message}` }
+            { text: `You are an expert AI assistant specializing in the Aptos blockchain ecosystem. Answer the following user question as an Aptos expert:\n\n${trimmed}` }
           ]
         }
       ]
@@ -57,11 +83,13 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString()
     });
 
-  } catch (error) {
-    console.error('🚨 AI Chat API Error:', error);
+  } catch (error: any) {
+    const msg = error?.message || 'Failed to process AI request';
+    const status = msg.includes('Rate limit') ? 429 : 500;
+    console.error('🚨 AI Chat API Error:', msg);
     return NextResponse.json(
-      { error: 'Failed to process AI request' },
-      { status: 500 }
+      { error: msg },
+      { status }
     );
   }
 } 

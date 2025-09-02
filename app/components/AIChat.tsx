@@ -124,9 +124,9 @@ export default function AIChat() {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 h-[600px] flex flex-col">
+    <div className="bg-white rounded-xl shadow-lg border border-gray-200 h-[70vh] md:h-[75vh] lg:h-[80vh] overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-3 p-4 border-b border-gray-200">
+      <div className="flex items-center gap-3 p-4 border-b border-gray-200 sticky top-0 z-10 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
         <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
           <Bot className="w-5 h-5 text-white" />
         </div>
@@ -212,7 +212,7 @@ export default function AIChat() {
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-gray-200">
+      <div className="p-4 border-t border-gray-200 sticky bottom-0 z-10 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
         <div className="flex gap-2">
           <input
             type="text"

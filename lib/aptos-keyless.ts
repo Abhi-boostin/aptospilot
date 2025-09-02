@@ -53,12 +53,27 @@ const storeKeylessAccount = (account: KeylessAccount): void => {
 };
 
 // Retrieve the KeylessAccount from localStorage if it exists
-const getLocalKeylessAccount = (): KeylessAccount | undefined => {
+export const getLocalKeylessAccount = (): KeylessAccount | undefined => {
   try {
     const encodedAccount = localStorage.getItem("@aptos/account");
-    return encodedAccount ? decodeKeylessAccount(encodedAccount) : undefined;
+    if (!encodedAccount) {
+      console.log("No keyless account found in localStorage");
+      return undefined;
+    }
+    
+    console.log("Found encoded keyless account, attempting to decode...");
+    const decodedAccount = decodeKeylessAccount(encodedAccount);
+    console.log("Successfully decoded keyless account:", {
+      hasSign: typeof decodedAccount.sign === 'function',
+      address: decodedAccount.accountAddress?.toString(),
+      publicKey: decodedAccount.publicKey?.toString()
+    });
+    
+    return decodedAccount;
   } catch (error) {
-    console.warn("Failed to decode account from localStorage", error);
+    console.error("Failed to decode account from localStorage:", error);
+    // Clear the corrupted data
+    localStorage.removeItem("@aptos/account");
     return undefined;
   }
 };
@@ -75,14 +90,32 @@ const encodeKeylessAccount = (account: KeylessAccount): string =>
   });
 
 // Parse the KeylessAccount from a string
-const decodeKeylessAccount = (encodedAccount: string): KeylessAccount =>
-  JSON.parse(encodedAccount, (_, e) => {
-    if (e && e.__type === "bigint") return BigInt(e.value);
-    if (e && e.__type === "Uint8Array") return new Uint8Array(e.value);
-    if (e && e.__type === "KeylessAccount")
-      return KeylessAccount.fromBytes(e.data);
-    return e;
-  });
+const decodeKeylessAccount = (encodedAccount: string): KeylessAccount => {
+  try {
+    const parsed = JSON.parse(encodedAccount, (_, e) => {
+      if (e && e.__type === "bigint") return BigInt(e.value);
+      if (e && e.__type === "Uint8Array") return new Uint8Array(e.value);
+      if (e && e.__type === "KeylessAccount") {
+        try {
+          return KeylessAccount.fromBytes(e.data);
+        } catch (error) {
+          console.error("Failed to reconstruct KeylessAccount from bytes:", error);
+          throw error;
+        }
+      }
+      return e;
+    });
+    
+    if (!parsed || typeof parsed.sign !== 'function') {
+      throw new Error("Invalid KeylessAccount object reconstructed from storage");
+    }
+    
+    return parsed;
+  } catch (error) {
+    console.error("Failed to decode KeylessAccount from localStorage:", error);
+    throw error;
+  }
+};
 
 // Parse JWT from URL fragment
 const parseJWTFromURL = (url: string): string | null => {
@@ -119,7 +152,7 @@ export class AptosKeylessManager {
     
     // 3. Prepare the URL params
     const redirectUri = `${window.location.origin}/auth/callback`;
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID!;
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!;
     const nonce = ephemeralKeyPair.nonce;
     
     console.log("📋 OIDC params:", { redirectUri, clientId, nonce: nonce.substring(0, 10) + "..." });
