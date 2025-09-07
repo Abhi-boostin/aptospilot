@@ -51,7 +51,7 @@ export default function SendAptModal({
       return false;
     }
 
-    // Validate Aptos address using SDK parser
+    // Validate Aptos address
     try {
       AccountAddress.from(recipient);
     } catch {
@@ -59,7 +59,7 @@ export default function SendAptModal({
       return false;
     }
 
-    // Check if we have the required wallet functions
+    // Wallet checks
     if (walletType === "petra") {
       if (!connected) {
         setErrorMessage("Petra wallet not connected. Please connect your wallet first.");
@@ -93,20 +93,14 @@ export default function SendAptModal({
       console.log("🌐 Network:", network);
       console.log("🔗 Wallet connected:", connected);
       console.log("📋 Petra account:", petraAccount);
-      console.log("🔧 signAndSubmitTransaction available:", typeof signAndSubmitTransaction === 'function');
 
-      // Convert amount to APT if it's in USD
+      // Convert amount
       let aptAmount = parseFloat(amount);
       if (amountType === "USD") {
         aptAmount = parseFloat(amount) / aptPrice;
       }
-
-      console.log("💰 Amount:", { original: amount, type: amountType, aptAmount });
-
-      // Convert to octas (1 APT = 10^8 octas)
       const amountInOctas = (aptAmount * 1e8).toString();
 
-      // Validate that we have all required values
       if (!recipient || !amountInOctas || amountInOctas === "NaN") {
         throw new Error("Invalid recipient or amount");
       }
@@ -124,75 +118,48 @@ export default function SendAptModal({
 
       if (walletType === "petra") {
         console.log("🔐 Using Petra wallet for signing...");
-        
-        // Double-check that signAndSubmitTransaction is available
-        if (!signAndSubmitTransaction || typeof signAndSubmitTransaction !== 'function') {
+        if (!signAndSubmitTransaction || typeof signAndSubmitTransaction !== "function") {
           throw new Error("Petra wallet signing function not available. Please reconnect your wallet.");
         }
-        
-        // Validate payload before sending
-        if (!payload || !payload.arguments || payload.arguments.length !== 2) {
-          throw new Error("Invalid transaction payload");
-        }
-        
+
+        // ✅ FIX: wrap payload inside { data: payload }
         console.log("📦 Sending payload to Petra:", payload);
-        response = await signAndSubmitTransaction(payload);
+        response = await signAndSubmitTransaction({ data: payload });
         setTransactionHash(response.hash);
         console.log("✅ Petra transaction submitted:", response.hash);
       } else if (walletType === "keyless") {
         console.log("🔐 Using Keyless wallet for signing...");
-        
+
         const keylessManager = new AptosKeylessManager();
         const aptos = new Aptos(new AptosConfig({ 
           network: network === "mainnet" ? Network.MAINNET : Network.TESTNET 
         }));
 
-        // Get the keyless account from storage
         const storedKeylessAccount = keylessManager.getExistingKeylessAccount();
-        console.log("📋 Stored keyless account:", storedKeylessAccount);
-        
         if (!storedKeylessAccount) {
           throw new Error("Keyless account not found. Please sign in again.");
         }
 
-        // Get the actual KeylessAccount object from localStorage
         const { getLocalKeylessAccount } = await import("@/lib/aptos-keyless");
         let keylessAccount = getLocalKeylessAccount();
-        console.log("🔑 Keyless account object:", keylessAccount);
-        
         if (!keylessAccount) {
-          console.warn("⚠️ Keyless account not found in localStorage, trying to recreate...");
-          // Try to recreate the keyless account from the stored info
           throw new Error("Keyless account not found in storage. Please sign in again.");
         }
 
-        if (typeof keylessAccount.sign !== 'function') {
-          console.error("❌ Keyless account sign method:", keylessAccount.sign);
-          console.error("❌ Keyless account type:", typeof keylessAccount);
-          console.error("❌ Keyless account keys:", Object.keys(keylessAccount));
-          throw new Error("Invalid keyless account object. Please sign in again.");
-        }
-
-        console.log("📝 Generating transaction...");
         const txn = await aptos.generateTransaction({
           sender: storedKeylessAccount.address,
           data: payload,
         });
 
-        console.log("✍️ Signing transaction...");
         const signedTxn = await keylessAccount.sign(txn);
-        
-        console.log("📤 Submitting transaction...");
         response = await aptos.submitTransaction(signedTxn);
         setTransactionHash(response.hash);
-        
-        console.log("⏳ Waiting for confirmation...");
+
         await aptos.waitForTransaction({ transactionHash: response.hash });
         console.log("✅ Keyless transaction confirmed:", response.hash);
       }
 
       setStatus("success");
-      
       setTimeout(() => {
         setRecipient("");
         setAmount("");
@@ -203,15 +170,6 @@ export default function SendAptModal({
 
     } catch (error) {
       console.error("🚨 Send APT error:", error);
-      console.error("🚨 Error details:", {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        walletType,
-        network,
-        recipient,
-        amount,
-        amountType
-      });
       setErrorMessage(error instanceof Error ? error.message : "Failed to send APT");
       setStatus("error");
     }
@@ -329,4 +287,4 @@ export default function SendAptModal({
       </div>
     </div>
   );
-} 
+}
