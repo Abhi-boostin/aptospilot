@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { Aptos, AptosConfig, Network, AccountAddress } from "@aptos-labs/ts-sdk";
 import { X, Send, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
-import { AptosKeylessManager } from "@/lib/aptos-keyless";
 
 interface SendAptModalProps {
   isOpen: boolean;
@@ -15,13 +14,13 @@ interface SendAptModalProps {
   aptPrice: number;
 }
 
-export default function SendAptModal({ 
-  isOpen, 
-  onClose, 
-  walletType, 
-  keylessAccount, 
+export default function SendAptModal({
+  isOpen,
+  onClose,
+  walletType,
+  keylessAccount,
   network,
-  aptPrice
+  aptPrice,
 }: SendAptModalProps) {
   const { account: petraAccount, signAndSubmitTransaction, connected } = useWallet();
   const [recipient, setRecipient] = useState("");
@@ -31,37 +30,23 @@ export default function SendAptModal({
   const [errorMessage, setErrorMessage] = useState("");
   const [transactionHash, setTransactionHash] = useState("");
 
-  const getCurrentAccount = () => {
-    if (walletType === "keyless" && keylessAccount) {
-      return keylessAccount;
-    } else if (walletType === "petra" && petraAccount && connected) {
-      return petraAccount;
-    }
-    return null;
-  };
-
   const validateInputs = () => {
     if (!recipient.trim()) {
       setErrorMessage("Please enter a recipient address");
       return false;
     }
-
     if (!amount || parseFloat(amount) <= 0) {
       setErrorMessage("Please enter a valid amount");
       return false;
     }
-
-    // Validate Aptos address
     try {
       AccountAddress.from(recipient);
     } catch {
       setErrorMessage("Please enter a valid Aptos address");
       return false;
     }
-
-    // Wallet checks
     if (walletType === "petra") {
-      if (!connected) {
+      if (!connected || !petraAccount) {
         setErrorMessage("Petra wallet not connected. Please connect your wallet first.");
         return false;
       }
@@ -70,7 +55,10 @@ export default function SendAptModal({
         return false;
       }
     }
-
+    if (walletType === "keyless" && !keylessAccount) {
+      setErrorMessage("Keyless account not available. Please authenticate first.");
+      return false;
+    }
     setErrorMessage("");
     return true;
   };
@@ -78,88 +66,73 @@ export default function SendAptModal({
   const handleSendApt = async () => {
     if (!validateInputs()) return;
 
-    const currentAccount = getCurrentAccount();
-    if (!currentAccount) {
-      setErrorMessage("No wallet connected");
-      return;
-    }
-
     setStatus("sending");
     setErrorMessage("");
 
     try {
-      console.log("🚀 Starting APT transfer...");
-      console.log("📱 Wallet type:", walletType);
-      console.log("🌐 Network:", network);
-      console.log("🔗 Wallet connected:", connected);
-      console.log("📋 Petra account:", petraAccount);
-
-      // Convert amount
       let aptAmount = parseFloat(amount);
       if (amountType === "USD") {
         aptAmount = parseFloat(amount) / aptPrice;
       }
-      const amountInOctas = (aptAmount * 1e8).toString();
 
-      if (!recipient || !amountInOctas || amountInOctas === "NaN") {
+      const amountInOctas = Math.floor(aptAmount * 1e8);
+
+      if (!recipient || isNaN(amountInOctas) || amountInOctas <= 0) {
         throw new Error("Invalid recipient or amount");
       }
 
-      const payload = {
-        type: "entry_function_payload",
-        function: "0x1::aptos_account::transfer",
-        type_arguments: [],
-        arguments: [recipient, amountInOctas],
-      };
-
-      console.log("📦 Transaction payload:", payload);
-
-      let response;
+      let responseHash: string;
 
       if (walletType === "petra") {
-        console.log("🔐 Using Petra wallet for signing...");
-        if (!signAndSubmitTransaction || typeof signAndSubmitTransaction !== "function") {
-          throw new Error("Petra wallet signing function not available. Please reconnect your wallet.");
+        if (!petraAccount || !signAndSubmitTransaction) {
+          throw new Error("Petra account not connected");
         }
 
-        // ✅ FIX: wrap payload inside { data: payload }
-        console.log("📦 Sending payload to Petra:", payload);
-        response = await signAndSubmitTransaction({ data: payload });
-        setTransactionHash(response.hash);
-        console.log("✅ Petra transaction submitted:", response.hash);
+        // Correct format according to Aptos Connect docs
+        const transaction = {
+          data: {
+            function: "0x1::aptos_account::transfer",
+            typeArguments: [],
+            functionArguments: [recipient, amountInOctas.toString()],
+          },
+        };
+
+        const response = await signAndSubmitTransaction(transaction as any);
+        responseHash = response.hash;
+
       } else if (walletType === "keyless") {
-        console.log("🔐 Using Keyless wallet for signing...");
-
-        const keylessManager = new AptosKeylessManager();
-        const aptos = new Aptos(new AptosConfig({ 
-          network: network === "mainnet" ? Network.MAINNET : Network.TESTNET 
-        }));
-
-        const storedKeylessAccount = keylessManager.getExistingKeylessAccount();
-        if (!storedKeylessAccount) {
-          throw new Error("Keyless account not found. Please sign in again.");
-        }
-
-        const { getLocalKeylessAccount } = await import("@/lib/aptos-keyless");
-        let keylessAccount = getLocalKeylessAccount();
         if (!keylessAccount) {
-          throw new Error("Keyless account not found in storage. Please sign in again.");
+          throw new Error("Keyless account not available");
         }
 
-        const txn = await aptos.generateTransaction({
-          sender: storedKeylessAccount.address,
-          data: payload,
+        const aptos = new Aptos(
+          new AptosConfig({
+            network: network === "mainnet" ? Network.MAINNET : Network.TESTNET,
+          })
+        );
+
+        const transaction = await aptos.transaction.build.simple({
+          sender: keylessAccount.accountAddress,
+          data: {
+            function: "0x1::aptos_account::transfer",
+            typeArguments: [],
+            functionArguments: [recipient, amountInOctas.toString()],
+          },
         });
 
-        const signedTxn = await keylessAccount.sign(txn);
-        response = await aptos.submitTransaction(signedTxn);
-        setTransactionHash(response.hash);
+        const response = await aptos.signAndSubmitTransaction({
+          signer: keylessAccount,
+          transaction,
+        });
 
-        await aptos.waitForTransaction({ transactionHash: response.hash });
-        console.log("✅ Keyless transaction confirmed:", response.hash);
+        responseHash = response.hash;
+      } else {
+        throw new Error("Unsupported wallet type");
       }
 
+      setTransactionHash(responseHash);
       setStatus("success");
+
       setTimeout(() => {
         setRecipient("");
         setAmount("");
@@ -168,15 +141,25 @@ export default function SendAptModal({
         onClose();
       }, 3000);
 
-    } catch (error) {
-      console.error("🚨 Send APT error:", error);
-      setErrorMessage(error instanceof Error ? error.message : "Failed to send APT");
+    } catch (err) {
+      console.error("Send APT Error:", err);
+      setErrorMessage(err instanceof Error ? err.message : "Failed to send APT");
       setStatus("error");
     }
   };
 
-  const handleClose = () => {
-    if (status === "sending") return;
+  // ... rest of your UI code remains the same
+  const formatAmount = () => {
+    if (!amount) return "";
+    const numAmount = parseFloat(amount);
+    if (amountType === "APT") {
+      return `≈ $${(numAmount * aptPrice).toFixed(2)} USD`;
+    } else {
+      return `≈ ${(numAmount / aptPrice).toFixed(4)} APT`;
+    }
+  };
+
+  const resetModal = () => {
     setRecipient("");
     setAmount("");
     setStatus("idle");
@@ -188,80 +171,85 @@ export default function SendAptModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[95vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-xl font-semibold text-gray-900">Send APT</h2>
-          <button
-            onClick={handleClose}
-            disabled={status === "sending"}
-            className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
-          >
-            <X className="w-6 h-6" />
+          <button onClick={resetModal} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
+            <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Recipient Address
-            </label>
+        <div className="p-6 space-y-6">
+          <div className="bg-gray-50 rounded-lg p-4">
+            <div className="text-sm text-gray-600">Sending from</div>
+            <div className="font-medium text-gray-900 capitalize">{walletType} Wallet</div>
+            {walletType === "petra" && petraAccount && (
+              <div className="text-xs text-gray-500 mt-1 font-mono">{petraAccount.address}</div>
+            )}
+            {walletType === "keyless" && keylessAccount && (
+              <div className="text-xs text-gray-500 mt-1 font-mono">
+                {keylessAccount.accountAddress?.toString()}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">Recipient Address</label>
             <input
               type="text"
               value={recipient}
               onChange={(e) => setRecipient(e.target.value)}
               placeholder="0x..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
               disabled={status === "sending"}
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Amount
-            </label>
-            <div className="flex gap-2">
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">Amount</label>
+            <div className="relative">
               <input
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.0"
-                step="0.00000001"
+                placeholder="0.00"
+                step="0.0001"
                 min="0"
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 pr-16 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={status === "sending"}
               />
-              <select
-                value={amountType}
-                onChange={(e) => setAmountType(e.target.value as "APT" | "USD")}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={status === "sending"}
-              >
-                <option value="APT">APT</option>
-                <option value="USD">USD</option>
-              </select>
+              <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                <select
+                  value={amountType}
+                  onChange={(e) => setAmountType(e.target.value as "APT" | "USD")}
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
+                  disabled={status === "sending"}
+                >
+                  <option value="APT">APT</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
             </div>
+            {amount && <div className="text-xs text-gray-500">{formatAmount()}</div>}
           </div>
 
           {errorMessage && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <AlertCircle className="w-5 h-5 text-red-500" />
+            <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
               <span className="text-sm text-red-700">{errorMessage}</span>
             </div>
           )}
 
-          {status === "success" && (
-            <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-              <CheckCircle className="w-5 h-5 text-green-500" />
-              <div>
-                <p className="text-sm text-green-700 font-medium">
-                  Transaction successful!
-                </p>
-                {transactionHash && (
-                  <p className="text-xs text-green-600 font-mono">
-                    Hash: {transactionHash.substring(0, 10)}...
-                  </p>
-                )}
+          {status === "success" && transactionHash && (
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                <span className="text-sm text-green-700">Transaction sent successfully!</span>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <div className="text-xs text-gray-600 mb-1">Transaction Hash:</div>
+                <div className="text-xs font-mono text-gray-800 break-all">{transactionHash}</div>
               </div>
             </div>
           )}
@@ -269,17 +257,17 @@ export default function SendAptModal({
           <button
             onClick={handleSendApt}
             disabled={status === "sending" || !recipient || !amount}
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition-colors"
           >
             {status === "sending" ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Sending...
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Sending...</span>
               </>
             ) : (
               <>
-                <Send className="w-5 h-5" />
-                Send APT
+                <Send className="w-4 h-4" />
+                <span>Send APT</span>
               </>
             )}
           </button>
